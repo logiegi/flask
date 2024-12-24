@@ -1,37 +1,51 @@
-from typing import Union
-import pydantic
 from flask import Flask, jsonify
 
-app = Flask("app")
+from ads import AdView
+from security import HttpError
+from users import UserView
+
+app = Flask(__name__)
 
 
-class HTTPError(Exception):
-    def __init__(self, status_code: int, message: Union[str, list, dict]):
-        self.status_code = status_code
-        self.message = message
-
-
-@app.errorhandler(HTTPError)
-def handle_invalid_usage(error):
-    response = jsonify({'message': error.message})
+@app.errorhandler(HttpError)
+def error_handler(error: HttpError):
+    # http-ответ клиенту:
+    response = jsonify({
+        "status": error.status_code,
+        "message": error.message
+    })
     response.status_code = error.status_code
     return response
 
 
-class CreateAdModel(pydantic.BaseModel):
-    title: str
-    description: str
-    owner: str
+app.add_url_rule('/user/<int:user_id>',
+                 view_func=UserView.as_view('user_existed'),
+                 methods=['GET', 'PATCH', 'DELETE']
+                 )
+app.add_url_rule('/user/',
+                 view_func=UserView.as_view('user_new'),
+                 methods=['POST']
+                 )
 
-    @pydantic.validator("title")
-    def min_max_length(cls, value: str):
-        if 1 > len(value) > 50:
-            raise ValueError('Title should be from 1 to 50 characters')
-        return value
+app.add_url_rule('/ad/<int:ad_id>',
+                 view_func=AdView.as_view('ad_existed'),
+                 methods=['GET', 'PATCH', 'DELETE']
+                 )
+app.add_url_rule('/ad/',
+                 view_func=AdView.as_view('ad_new'),
+                 methods=['POST']
+                 )
 
 
-def validate(unvalidated_data: dict, validation_model):
-    try:
-        return validation_model(**unvalidated_data).dict()
-    except pydantic.ValidationError as er:
-        raise HTTPError(400, er.errors())
+def hello():
+    return jsonify({
+        "add-site": "Hello! REST API for ad-site is working yet!"
+    })
+
+
+app.add_url_rule('/',
+                 view_func=hello,
+                 methods=['POST', 'GET', 'PATCH', 'DELETE'])  # CRUD
+
+if __name__ == '__main__':
+    app.run()
